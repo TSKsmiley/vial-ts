@@ -322,7 +322,7 @@
           style:width="{(bounds.maxX - bounds.minX) * keyUnit}px"
           style:height="{(bounds.maxY - bounds.minY) * keyUnit}px"
         >
-          {#each layoutKeys as lk (lk.row * 256 + lk.col)}
+          {#each layoutKeys as lk, i (i)}
             {@const code = vil.layout[activeLayer]?.[lk.row]?.[lk.col] ?? 0}
             {@const isEditing =
               editing?.layer === activeLayer &&
