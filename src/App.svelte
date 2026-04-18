@@ -630,7 +630,7 @@
     font-size: 0.68rem;
     color: #c8cef7;
     text-align: center;
-    word-break: break-all;
+    overflow-wrap: anywhere;
     line-height: 1.2;
     pointer-events: none;
   }

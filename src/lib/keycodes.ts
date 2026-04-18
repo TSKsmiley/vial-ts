@@ -149,12 +149,60 @@ export const KC_RSFT = 0x00E5
 export const KC_RALT = 0x00E6
 export const KC_RGUI = 0x00E7
 
+// QMK system / media keycodes (consumer page, 0x00A5–0x00BE)
+export const KC_PWR   = 0x00A5  // System Power
+export const KC_SLEP  = 0x00A6  // System Sleep
+export const KC_WAKE  = 0x00A7  // System Wake
+export const KC_MUTE  = 0x00A8  // Audio Mute
+export const KC_VOLU  = 0x00A9  // Audio Volume Up
+export const KC_VOLD  = 0x00AA  // Audio Volume Down
+export const KC_MNXT  = 0x00AB  // Media Next Track
+export const KC_MPRV  = 0x00AC  // Media Previous Track
+export const KC_MSTP  = 0x00AD  // Media Stop
+export const KC_MPLY  = 0x00AE  // Media Play/Pause
+export const KC_MSEL  = 0x00AF  // Media Select
+export const KC_EJCT  = 0x00B0  // Media Eject
+export const KC_MAIL  = 0x00B1  // Mail
+export const KC_CALC  = 0x00B2  // Calculator
+export const KC_MYCM  = 0x00B3  // My Computer
+export const KC_WSCH  = 0x00B4  // WWW Search
+export const KC_WHOM  = 0x00B5  // WWW Home
+export const KC_WBAK  = 0x00B6  // WWW Back
+export const KC_WFWD  = 0x00B7  // WWW Forward
+export const KC_WSTP  = 0x00B8  // WWW Stop
+export const KC_WREF  = 0x00B9  // WWW Refresh
+export const KC_WFAV  = 0x00BA  // WWW Favourites
+export const KC_MFFD  = 0x00BB  // Media Fast Forward
+export const KC_MRWD  = 0x00BC  // Media Rewind
+export const KC_BRIU  = 0x00BD  // Brightness Up
+export const KC_BRID  = 0x00BE  // Brightness Down
+
+// QMK mouse keycodes (0x00CD–0x00DF)
+export const KC_MS_U  = 0x00CD  // Mouse Cursor Up
+export const KC_MS_D  = 0x00CE  // Mouse Cursor Down
+export const KC_MS_L  = 0x00CF  // Mouse Cursor Left
+export const KC_MS_R  = 0x00D0  // Mouse Cursor Right
+export const KC_BTN1  = 0x00D1  // Mouse Button 1
+export const KC_BTN2  = 0x00D2  // Mouse Button 2
+export const KC_BTN3  = 0x00D3  // Mouse Button 3
+export const KC_BTN4  = 0x00D4  // Mouse Button 4
+export const KC_BTN5  = 0x00D5  // Mouse Button 5
+export const KC_WH_U  = 0x00D9  // Mouse Wheel Up
+export const KC_WH_D  = 0x00DA  // Mouse Wheel Down
+export const KC_WH_L  = 0x00DB  // Mouse Wheel Left
+export const KC_WH_R  = 0x00DC  // Mouse Wheel Right
+export const KC_ACL0  = 0x00DD  // Mouse Acceleration 0
+export const KC_ACL1  = 0x00DE  // Mouse Acceleration 1
+export const KC_ACL2  = 0x00DF  // Mouse Acceleration 2
+
 // ── QMK layer / special keycodes ────────────────────────────────────────────
 
 /** Mod-tap: MT(mod, kc) — range 0x2000–0x3FFF */
 export const QK_MOD_TAP          = 0x2000
 /** Layer-tap: LT(layer, kc) — range 0x4000–0x4FFF */
 export const QK_LAYER_TAP        = 0x4000
+/** Modifier+key shorthand: S(kc), C(kc), etc. — range 0x0100–0x1FFF */
+export const QK_MODS             = 0x0100
 /** Momentary layer activation: MO(n) */
 export const QK_MOMENTARY        = 0x5100
 /** Switch to layer: TO(n) */
@@ -168,12 +216,52 @@ export const QK_TAP_TOGGLE       = 0x5800
 /** One-shot modifier: OSM(mod) */
 export const QK_ONE_SHOT_MOD     = 0x5500
 
+// RGB Light keycodes (0x5C00–0x5C11, older vial-qmk / RGBLIGHT)
+export const BL_TOGG  = 0x5C00
+export const BL_STEP  = 0x5C01
+export const BL_ON    = 0x5C02
+export const BL_OFF   = 0x5C03
+export const BL_INC   = 0x5C04
+export const BL_DEC   = 0x5C05
+export const BL_BRTG  = 0x5C06
+export const RGB_TOG  = 0x5C07
+export const RGB_MOD  = 0x5C08
+export const RGB_HUI  = 0x5C09
+export const RGB_HUD  = 0x5C0A
+export const RGB_SAI  = 0x5C0B
+export const RGB_SAD  = 0x5C0C
+export const RGB_VAI  = 0x5C0D
+export const RGB_VAD  = 0x5C0E
+export const RGB_RMOD = 0x5C0F
+export const RGB_SPI  = 0x5C10
+export const RGB_SPD  = 0x5C11
+
+// QMK boot / EEPROM keycodes (positions vary by QMK version)
+export const QK_BOOT  = 0x7473  // newer QMK
+export const QK_RBT   = 0x7474  // newer QMK reboot
+export const QK_EE_RST = 0x7476 // newer QMK clear EEPROM
+export const RESET_OLD = 0x5C25 // older vial-qmk RESET
+export const EEP_RST_OLD = 0x5C26 // older vial-qmk EEP_RST
+
+// RGB Matrix keycodes (0x7840–0x784A, newer QMK / vial-qmk)
+export const RM_NEXT  = 0x7840
+export const RM_PREV  = 0x7841
+export const RM_TOGG  = 0x7842
+export const RM_HUEU  = 0x7843
+export const RM_HUED  = 0x7844
+export const RM_SATU  = 0x7845
+export const RM_SATD  = 0x7846
+export const RM_VALU  = 0x7847
+export const RM_VALD  = 0x7848
+export const RM_SPDU  = 0x7849
+export const RM_SPDD  = 0x784A
+
 // ── Lookup tables ────────────────────────────────────────────────────────────
 
 /** Map from QMK keycode value to its display name */
 export const KEYCODE_NAMES: ReadonlyMap<number, string> = new Map([
-  [KC_NO,          'KC_NO'],
-  [KC_TRANSPARENT, 'KC_TRNS'],
+  [KC_NO,          ''],
+  [KC_TRANSPARENT, '▽'],
   // Letters
   [KC_A, 'A'], [KC_B, 'B'], [KC_C, 'C'], [KC_D, 'D'], [KC_E, 'E'],
   [KC_F, 'F'], [KC_G, 'G'], [KC_H, 'H'], [KC_I, 'I'], [KC_J, 'J'],
@@ -216,6 +304,39 @@ export const KEYCODE_NAMES: ReadonlyMap<number, string> = new Map([
   // Modifiers
   [KC_LCTL, 'LCtrl'],  [KC_LSFT, 'LShft'], [KC_LALT, 'LAlt'],  [KC_LGUI, 'LGui'],
   [KC_RCTL, 'RCtrl'],  [KC_RSFT, 'RShft'], [KC_RALT, 'RAlt'],  [KC_RGUI, 'RGui'],
+  // System / media
+  [KC_PWR,  'Pwr'],   [KC_SLEP, 'Sleep'], [KC_WAKE, 'Wake'],
+  [KC_MUTE, 'Mute'],  [KC_VOLU, 'Vol+'],  [KC_VOLD, 'Vol-'],
+  [KC_MNXT, 'Next'],  [KC_MPRV, 'Prev'],  [KC_MSTP, 'Stop'],  [KC_MPLY, 'Play'],
+  [KC_MSEL, 'Media'], [KC_EJCT, 'Eject'], [KC_MAIL, 'Mail'],  [KC_CALC, 'Calc'],
+  [KC_MYCM, 'MyPC'],
+  [KC_WSCH, 'WSearch'], [KC_WHOM, 'WHome'],  [KC_WBAK, 'WBack'],
+  [KC_WFWD, 'WFwd'],   [KC_WSTP, 'WStop'],  [KC_WREF, 'WRefr'],  [KC_WFAV, 'WFav'],
+  [KC_MFFD, 'FFwd'],   [KC_MRWD, 'Rewind'],
+  [KC_BRIU, 'Bri+'],   [KC_BRID, 'Bri-'],
+  // Mouse
+  [KC_MS_U, 'M↑'],   [KC_MS_D, 'M↓'],   [KC_MS_L, 'M←'],   [KC_MS_R, 'M→'],
+  [KC_BTN1, 'Btn1'],  [KC_BTN2, 'Btn2'],  [KC_BTN3, 'Btn3'],
+  [KC_BTN4, 'Btn4'],  [KC_BTN5, 'Btn5'],
+  [KC_WH_U, 'WhlUp'], [KC_WH_D, 'WhlDn'], [KC_WH_L, 'WhlL'],  [KC_WH_R, 'WhlR'],
+  [KC_ACL0, 'Acl0'],  [KC_ACL1, 'Acl1'],  [KC_ACL2, 'Acl2'],
+  // RGB Light (older vial-qmk / RGBLIGHT)
+  [BL_TOGG,  'BL_TOG'],  [BL_STEP, 'BL_STEP'], [BL_ON,  'BL_ON'],  [BL_OFF, 'BL_OFF'],
+  [BL_INC,   'BL+'],     [BL_DEC,  'BL-'],      [BL_BRTG, 'BL_BRTG'],
+  [RGB_TOG,  'RGB_TOG'], [RGB_MOD, 'RGB_MOD'],  [RGB_RMOD, 'RGB_RMOD'],
+  [RGB_HUI,  'RGB_HUI'], [RGB_HUD, 'RGB_HUD'],
+  [RGB_SAI,  'RGB_SAI'], [RGB_SAD, 'RGB_SAD'],
+  [RGB_VAI,  'RGB_VAI'], [RGB_VAD, 'RGB_VAD'],
+  [RGB_SPI,  'RGB_SPI'], [RGB_SPD, 'RGB_SPD'],
+  // RGB Matrix (newer QMK / vial-qmk)
+  [RM_NEXT, 'RM_NEXT'], [RM_PREV, 'RM_PREV'], [RM_TOGG, 'RM_TOGG'],
+  [RM_HUEU, 'RM_HUI'],  [RM_HUED, 'RM_HUD'],
+  [RM_SATU, 'RM_SAI'],  [RM_SATD, 'RM_SAD'],
+  [RM_VALU, 'RM_VAI'],  [RM_VALD, 'RM_VAD'],
+  [RM_SPDU, 'RM_SPI'],  [RM_SPDD, 'RM_SPD'],
+  // Boot / EEPROM
+  [QK_BOOT,    'Boot'],   [QK_RBT,    'Reboot'], [QK_EE_RST,  'EE_CLR'],
+  [RESET_OLD,  'Reset'],  [EEP_RST_OLD, 'EEP_RST'],
 ])
 
 /** Map from display name (upper-cased) back to keycode value */
@@ -225,10 +346,11 @@ const NAME_TO_CODE = new Map<string, number>(
 
 // ── Mod-tap helper ───────────────────────────────────────────────────────────
 
-/** QMK 5-bit modifier field used in mod-tap keycodes. */
+/** QMK 5-bit modifier field used in mod-tap and modifier+key keycodes. */
 const MT_MOD_NAMES: ReadonlyMap<number, string> = new Map([
   [0x01, 'LCTL'], [0x02, 'LSFT'], [0x04, 'LALT'], [0x08, 'LGUI'],
   [0x11, 'RCTL'], [0x12, 'RSFT'], [0x14, 'RALT'], [0x18, 'RGUI'],
+  [0x07, 'MEH'],  [0x0F, 'HYPR'],
 ])
 
 /** Format the 5-bit modifier field of an MT keycode (e.g. 0x03 → "LCTL+LSFT"). */
@@ -254,10 +376,19 @@ function modName(mods: number): string {
 export function keycodeName(code: number): string {
   if (KEYCODE_NAMES.has(code)) return KEYCODE_NAMES.get(code)!
 
-  // Mod-tap: MT(mod, kc) — 0x2000–0x3FFF  (bits 14-13 = 01 with bit 13 of 0x2000 set)
+  // Modifier+key shorthand: 0x0100–0x1FFF
+  // Bits 12–8 = 5-bit mod mask (same as MT), bits 7–0 = basic keycode
+  if (code >= 0x0100 && code <= 0x1FFF) {
+    const mods  = (code >> 8) & 0x1F
+    const kc    = code & 0xFF
+    const kcStr = KEYCODE_NAMES.get(kc) ?? `0x${kc.toString(16).padStart(2, '0').toUpperCase()}`
+    return `${modName(mods)}(${kcStr})`
+  }
+
+  // Mod-tap: MT(mod, kc) — 0x2000–0x3FFF
   if ((code & 0xE000) === QK_MOD_TAP) {
-    const mods = (code >> 8) & 0x1F
-    const kc   = code & 0xFF
+    const mods  = (code >> 8) & 0x1F
+    const kc    = code & 0xFF
     const kcStr = KEYCODE_NAMES.get(kc) ?? `0x${kc.toString(16).padStart(2, '0').toUpperCase()}`
     return `${modName(mods)}/${kcStr}`
   }
@@ -300,13 +431,24 @@ export function keycodeFromName(name: string): number | undefined {
     return (map[layerMatch[1]] | n)
   }
 
-  // Mod-tap: "LCTL/D", "LSFT/S", etc.
+  // Modifier+key shorthand: "HYPR(X)", "MEH(A)", "LCTL(←)", etc.
+  const modKeyMatch = name.match(/^([^/(]+)\((.+)\)$/)
+  if (modKeyMatch) {
+    const modStr = modKeyMatch[1].toUpperCase()
+    const kcVal  = keycodeFromName(modKeyMatch[2])
+    if (kcVal !== undefined && kcVal <= 0xFF) {
+      for (const [mod, nm] of MT_MOD_NAMES) {
+        if (nm === modStr) return QK_MODS | (mod << 8) | kcVal
+      }
+    }
+  }
+
+  // Mod-tap: "LCTL/D", "HYPR/X", etc.
   const modTapMatch = name.match(/^([^/]+)\/(.+)$/)
   if (modTapMatch) {
     const modStr = modTapMatch[1].toUpperCase()
     const kcVal  = keycodeFromName(modTapMatch[2])
     if (kcVal !== undefined && kcVal <= 0xFF) {
-      // Reverse-lookup mod name
       for (const [mod, nm] of MT_MOD_NAMES) {
         if (nm === modStr) return QK_MOD_TAP | (mod << 8) | kcVal
       }
