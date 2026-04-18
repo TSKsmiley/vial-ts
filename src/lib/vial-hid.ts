@@ -91,6 +91,26 @@ function lzmaDecompress(data: Uint8Array): Promise<Uint8Array> {
   })
 }
 
+// ── Debugging helpers ─────────────────────────────────────────────────────────
+
+/** Format a Uint8Array as a compact hex string, e.g. "FE 00 A1 …" */
+function toHex(data: Uint8Array, maxBytes = 32): string {
+  const slice = data.slice(0, maxBytes)
+  const hex   = Array.from(slice, b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
+  return data.length > maxBytes ? hex + ` … (+${data.length - maxBytes} more)` : hex
+}
+
+/** Known XZ magic: fd 37 7a 58 5a 00.  LZMA1 magic: first byte is properties (0x5d typical). */
+function describeCompressedFormat(data: Uint8Array): string {
+  if (data.length < 6) return `too short (${data.length} bytes)`
+  if (data[0] === 0xFD && data[1] === 0x37 && data[2] === 0x7A &&
+      data[3] === 0x58 && data[4] === 0x5A && data[5] === 0x00) {
+    return 'XZ format ✓'
+  }
+  if (data[0] === 0x5D) return 'LZMA1 (.lzma) format'
+  return `unknown format (first byte 0x${data[0].toString(16).padStart(2,'0').toUpperCase()})`
+}
+
 // ── HID helpers ──────────────────────────────────────────────────────────────
 
 /** Zero-pad `msg` to exactly MSG_LEN bytes, matching vial-web worker.js. */
@@ -100,9 +120,24 @@ function pad(msg: Uint8Array): ArrayBuffer {
   return buf
 }
 
-// ── VialKeyboard ─────────────────────────────────────────────────────────────
+// ── Error type ────────────────────────────────────────────────────────────────
+
+/**
+ * Thrown by requestVialKeyboard() when the connection fails.
+ * Carries the full debug log collected during the attempt.
+ */
+export class VialConnectionError extends Error {
+  readonly log: string[]
+  constructor(message: string, log: string[]) {
+    super(message)
+    this.name = 'VialConnectionError'
+    this.log  = log
+  }
+}
 
 export class ProtocolError extends Error {}
+
+// ── VialKeyboard ─────────────────────────────────────────────────────────────
 
 /**
  * A connected Vial keyboard, communicating via WebHID.
@@ -127,6 +162,12 @@ export class VialKeyboard {
   /** keymap[layer][row][col] = QMK keycode (uint16, big-endian on wire) */
   keymap: number[][][] = []
 
+  /** Debug log lines collected during connect().  Inspect after failure. */
+  readonly log: string[] = []
+
+  /** Optional real-time callback – called for every log line as it is written. */
+  onLog?: (line: string) => void
+
   // Per-request response promise plumbing (one in-flight request at a time)
   private _resolve: ((data: Uint8Array) => void) | null = null
   private _reject: ((err: Error) => void) | null = null
@@ -142,7 +183,20 @@ export class VialKeyboard {
 
   /** Open the device and fully load definition + keymap. */
   async connect(): Promise<void> {
-    if (!this.device.opened) await this.device.open()
+    this.log.length = 0  // reset log on each attempt
+    this._dbg(`Device: ${this.device.productName || '(unnamed)'} `
+      + `VID=0x${this.device.vendorId.toString(16).padStart(4,'0').toUpperCase()} `
+      + `PID=0x${this.device.productId.toString(16).padStart(4,'0').toUpperCase()}`)
+    this._dbg(`Collections: ${this.device.collections.length} — `
+      + this.device.collections.map(c =>
+          `usagePage=0x${(c.usagePage ?? 0).toString(16)} usage=0x${(c.usage ?? 0).toString(16)}`
+        ).join(', '))
+
+    if (!this.device.opened) {
+      this._dbg('Opening device…')
+      await this.device.open()
+    }
+    this._dbg('Device opened ✓')
 
     // Set up the response handler once, exactly like vial-web index.html:
     //   devices[0].oninputreport = function(ev) { ev.data.getUint8(i) ... }
@@ -154,8 +208,12 @@ export class VialKeyboard {
       if (this._resolve) {
         const resolve = this._resolve
         this._resolve = this._reject = null
+        // Safely read up to MSG_LEN bytes; ev.data.byteLength may differ
+        const available = ev.data.byteLength
         const data = new Uint8Array(MSG_LEN)
-        for (let i = 0; i < MSG_LEN; i++) data[i] = ev.data.getUint8(i)
+        for (let i = 0; i < Math.min(MSG_LEN, available); i++) {
+          data[i] = ev.data.getUint8(i)
+        }
         resolve(data)
       }
     }
@@ -208,6 +266,16 @@ export class VialKeyboard {
           await this.setKey(l, r, c, vil.layout[l][r][c])
   }
 
+  // ── Debug logging ──────────────────────────────────────────────────────────
+
+  private _dbg(line: string): void {
+    const ts  = new Date().toISOString().slice(11, 23)  // HH:MM:SS.mmm
+    const msg = `[${ts}] ${line}`
+    this.log.push(msg)
+    this.onLog?.(msg)
+    console.log('[vial-hid]', line)
+  }
+
   // ── Private transport ──────────────────────────────────────────────────────
 
   /**
@@ -217,14 +285,19 @@ export class VialKeyboard {
    *   g_read_timeout = setTimeout(read_timeout, 500)
    */
   private _send(msg: Uint8Array): Promise<Uint8Array> {
+    this._dbg(`→ TX [${toHex(msg)}]`)
     return new Promise((resolve, reject) => {
-      this._resolve = resolve
-      this._reject  = reject
+      this._resolve = (data: Uint8Array) => {
+        this._dbg(`← RX [${toHex(data)}]`)
+        resolve(data)
+      }
+      this._reject = reject
 
       // 500 ms timeout, matching vial-web's read_timeout()
       this._readTimeout = setTimeout(() => {
         this._resolve = this._reject = null
         this._readTimeout = null
+        this._dbg('✗ HID read timed out after 500 ms')
         reject(new Error('HID read timed out'))
       }, 500)
 
@@ -232,6 +305,7 @@ export class VialKeyboard {
       this.device.sendReport(0, pad(msg)).catch((err: Error) => {
         if (this._readTimeout !== null) { clearTimeout(this._readTimeout); this._readTimeout = null }
         this._resolve = this._reject = null
+        this._dbg(`✗ sendReport failed: ${err.message}`)
         reject(err)
       })
     })
@@ -241,8 +315,10 @@ export class VialKeyboard {
 
   /** CMD_VIA_GET_PROTOCOL_VERSION → big-endian uint16 at [1:3] */
   private async _reloadViaProtocol(): Promise<void> {
+    this._dbg('Step 1 – GET_PROTOCOL_VERSION (0x01)')
     const d = await this._send(new Uint8Array([CMD_VIA_GET_PROTOCOL_VERSION]))
     this.viaProtocol = (d[1] << 8) | d[2]
+    this._dbg(`  VIA protocol version: ${this.viaProtocol} (0x${this.viaProtocol.toString(16).padStart(4,'0').toUpperCase()})`)
   }
 
   /**
@@ -260,16 +336,25 @@ export class VialKeyboard {
    *       → MSG_LEN bytes of LZMA/XZ compressed definition (repeat until done)
    */
   private async _reloadLayout(): Promise<void> {
-    // Step 1 – identity
+    // Step 2 – identity
+    this._dbg('Step 2 – VIAL_GET_KEYBOARD_ID (0xFE 0x00)')
     const id = await this._send(new Uint8Array([CMD_VIA_VIAL_PREFIX, CMD_VIAL_GET_KEYBOARD_ID]))
     this.vialProtocol = id[0] | (id[1] << 8) | (id[2] << 16) | (id[3] << 24)
     this.uid = (id[4] | (id[5] << 8) | (id[6] << 16) | (id[7] << 24)) >>> 0
+    this._dbg(`  Vial protocol version: ${this.vialProtocol}`)
+    this._dbg(`  UID (low 32 bits): 0x${this.uid.toString(16).padStart(8,'0').toUpperCase()}`)
 
-    // Step 2 – compressed size
+    // Step 3 – compressed size
+    this._dbg('Step 3 – VIAL_GET_SIZE (0xFE 0x01)')
     const sz = await this._send(new Uint8Array([CMD_VIA_VIAL_PREFIX, CMD_VIAL_GET_SIZE]))
     const totalSize = sz[0] | (sz[1] << 8) | (sz[2] << 16) | (sz[3] << 24)
+    this._dbg(`  Compressed definition size: ${totalSize} bytes`)
+    if (totalSize === 0 || totalSize > 65536) {
+      this._dbg(`  ⚠ Suspicious size value – may indicate command mismatch or unsupported firmware`)
+    }
 
-    // Step 3 – fetch in MSG_LEN-byte blocks (little-endian block number)
+    // Step 4 – fetch in MSG_LEN-byte blocks (little-endian block number)
+    this._dbg(`Step 4 – VIAL_GET_DEFINITION (0xFE 0x02), ${Math.ceil(totalSize / MSG_LEN)} block(s)`)
     const compressed = new Uint8Array(totalSize)
     let fetched = 0
     for (let block = 0; fetched < totalSize; block++) {
@@ -286,25 +371,54 @@ export class VialKeyboard {
       compressed.set(chunk.slice(0, take), fetched)
       fetched += take
     }
+    this._dbg(`  Received ${fetched} compressed bytes`)
+    this._dbg(`  Compressed header: [${toHex(compressed.slice(0, 8))}] → ${describeCompressedFormat(compressed)}`)
 
-    // Decompress LZMA/XZ → JSON → definition
-    const jsonBytes = await lzmaDecompress(compressed)
-    this.definition = JSON.parse(new TextDecoder('utf-8').decode(jsonBytes)) as KeyboardDefinition
+    // Step 5 – Decompress LZMA/XZ → JSON → definition
+    this._dbg('Step 5 – LZMA decompress')
+    let jsonBytes: Uint8Array
+    try {
+      jsonBytes = await lzmaDecompress(compressed)
+    } catch (e) {
+      const msg = (e as Error).message ?? String(e)
+      this._dbg(`  ✗ LZMA decompression failed: ${msg}`)
+      this._dbg(`  Full compressed data (first 64 bytes): [${toHex(compressed.slice(0, 64), 64)}]`)
+      throw new Error(`LZMA decompression failed: ${msg}`)
+    }
+    this._dbg(`  Decompressed ${jsonBytes.length} bytes`)
+
+    const jsonStr = new TextDecoder('utf-8').decode(jsonBytes)
+    this._dbg(`  JSON preview: ${jsonStr.slice(0, 120)}…`)
+    try {
+      this.definition = JSON.parse(jsonStr) as KeyboardDefinition
+    } catch (e) {
+      this._dbg(`  ✗ JSON parse failed: ${(e as Error).message}`)
+      throw new Error(`Definition JSON parse failed: ${(e as Error).message}`)
+    }
     this.rows = this.definition.matrix.rows
     this.cols = this.definition.matrix.cols
+    this._dbg(`  Definition OK – matrix ${this.rows}r × ${this.cols}c, name: ${this.definition.name ?? '(unnamed)'}`)
   }
 
   /** CMD_VIA_GET_LAYER_COUNT → byte [1] */
   private async _reloadLayers(): Promise<void> {
+    this._dbg('Step 6 – GET_LAYER_COUNT (0x11)')
     const d = await this._send(new Uint8Array([CMD_VIA_GET_LAYER_COUNT]))
     this.layers = d[1]
+    this._dbg(`  Layers: ${this.layers}`)
   }
 
   private _checkProtocol(): void {
-    if (!SUPPORTED_VIA_PROTOCOL.has(this.viaProtocol))
+    this._dbg(`Protocol check – VIA=${this.viaProtocol}, Vial=${this.vialProtocol}`)
+    if (!SUPPORTED_VIA_PROTOCOL.has(this.viaProtocol)) {
+      this._dbg(`  ✗ VIA protocol ${this.viaProtocol} not in supported set`)
       throw new ProtocolError(`Unsupported VIA protocol: ${this.viaProtocol}`)
-    if (!SUPPORTED_VIAL_PROTOCOL.has(this.vialProtocol))
+    }
+    if (!SUPPORTED_VIAL_PROTOCOL.has(this.vialProtocol)) {
+      this._dbg(`  ✗ Vial protocol ${this.vialProtocol} not in supported set`)
       throw new ProtocolError(`Unsupported Vial protocol: ${this.vialProtocol}`)
+    }
+    this._dbg('  Protocol versions OK ✓')
   }
 
   /**
@@ -317,6 +431,7 @@ export class VialKeyboard {
   private async _reloadKeymap(): Promise<void> {
     const { layers, rows, cols } = this
     const totalBytes = layers * rows * cols * 2
+    this._dbg(`Step 7 – GET_KEYMAP_BUFFER: ${layers}L × ${rows}R × ${cols}C = ${totalBytes} bytes`)
     const buf = new Uint8Array(totalBytes)
 
     for (let offset = 0; offset < totalBytes; offset += BUFFER_FETCH_CHUNK) {
@@ -341,6 +456,7 @@ export class VialKeyboard {
         }),
       ),
     )
+    this._dbg('  Keymap loaded ✓')
   }
 }
 
@@ -352,17 +468,24 @@ export class VialKeyboard {
  *
  *   navigator.hid.requestDevice({filters:[{usagePage:0xFF60,usage:0x61}]})
  *   devices[0].open()
+ *
+ * On failure, throws VialConnectionError which carries the full debug log.
  */
-export async function requestVialKeyboard(): Promise<VialKeyboard> {
+export async function requestVialKeyboard(onLog?: (line: string) => void): Promise<VialKeyboard> {
   if (!('hid' in navigator)) {
-    throw new Error(
-      'WebHID is not supported in this browser. ' +
-      'Use Chrome or Edge 89+.',
+    throw new VialConnectionError(
+      'WebHID is not supported in this browser. Use Chrome or Edge 89+.',
+      [],
     )
   }
   const devices = await navigator.hid.requestDevice({ filters: VIAL_HID_FILTERS })
-  if (!devices.length) throw new Error('No device selected.')
+  if (!devices.length) throw new VialConnectionError('No device selected.', [])
   const kb = new VialKeyboard(devices[0])
-  await kb.connect()
+  if (onLog) kb.onLog = onLog
+  try {
+    await kb.connect()
+  } catch (e) {
+    throw new VialConnectionError((e as Error).message, kb.log)
+  }
   return kb
 }

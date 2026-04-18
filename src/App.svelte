@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { requestVialKeyboard, VialKeyboard, ProtocolError } from './lib/vial-hid'
+  import { requestVialKeyboard, VialKeyboard, VialConnectionError, ProtocolError } from './lib/vial-hid'
   import { loadVil, saveVil, downloadVil, readVilFile } from './lib/vil'
   import { keycodeName, keycodeFromName } from './lib/keycodes'
   import type { VilFile } from './lib/types'
@@ -15,6 +15,12 @@
   let activeLayer = $state(0)
   let status = $state('')
   let busy = $state(false)
+
+  /** Debug log lines from the most recent connection attempt */
+  let debugLog = $state<string[]>([])
+
+  /** Whether the debug panel is open */
+  let debugOpen = $state(false)
 
   /** Currently editing: { layer, row, col } or null */
   let editing: { layer: number; row: number; col: number } | null = $state(null)
@@ -33,15 +39,29 @@
   async function withBusy<T>(fn: () => Promise<T>): Promise<T | undefined> {
     busy = true; status = ''
     try { return await fn() }
-    catch (e) { setStatus(`⚠ ${(e as Error).message}`); return undefined }
+    catch (e) {
+      const err = e as Error
+      setStatus(`⚠ ${err.message}`)
+      // If the error carries a debug log, surface it
+      if (e instanceof VialConnectionError && e.log.length) {
+        debugLog  = e.log
+        debugOpen = true
+      }
+      return undefined
+    }
     finally { busy = false }
   }
 
   // ── Connect to keyboard ────────────────────────────────────────────────────
 
   async function connectKeyboard() {
+    debugLog  = []
+    debugOpen = false
     await withBusy(async () => {
-      const kb = await requestVialKeyboard()
+      const kb = await requestVialKeyboard(line => {
+        // Real-time append so the log fills even on success
+        debugLog = [...debugLog, line]
+      })
       keyboard = kb
       source   = 'keyboard'
       vil      = kb.saveLayout()
@@ -201,6 +221,30 @@
       <p class="status busy">Working…</p>
     {/if}
   </section>
+
+  <!-- ── Debug log ──────────────────────────────────────────────────────── -->
+  {#if debugLog.length}
+    <section class="card debug-card">
+      <button
+        class="debug-toggle"
+        onclick={() => { debugOpen = !debugOpen }}
+        aria-expanded={debugOpen}
+      >
+        <span class="debug-icon">{debugOpen ? '▾' : '▸'}</span>
+        HID debug log
+        <span class="debug-count">{debugLog.length} lines</span>
+      </button>
+      {#if debugOpen}
+        <div class="debug-body">
+          <button
+            class="btn btn-secondary debug-copy"
+            onclick={() => navigator.clipboard?.writeText(debugLog.join('\n'))}
+          >Copy</button>
+          <pre class="debug-pre">{debugLog.join('\n')}</pre>
+        </div>
+      {/if}
+    </section>
+  {/if}
 
   <!-- ── Keymap editor ──────────────────────────────────────────────────── -->
   {#if vil}
@@ -503,4 +547,59 @@
   .hint strong { color: #c8cef7; }
   .hint span { font-size: 0.85rem; }
   .hint code { background: #1e2448; padding: 0.1rem 0.3rem; border-radius: 3px; }
+
+  /* ── debug log ── */
+  .debug-card { padding: 0.6rem 1rem; }
+
+  .debug-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: none;
+    border: none;
+    color: #8892c0;
+    font-size: 0.82rem;
+    cursor: pointer;
+    padding: 0.25rem 0;
+    text-align: left;
+  }
+  .debug-toggle:hover { color: #c8cef7; }
+  .debug-icon { font-size: 0.7rem; }
+  .debug-count {
+    margin-left: auto;
+    background: #1e2448;
+    border: 1px solid #3b4275;
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.72rem;
+    color: #6b7494;
+  }
+
+  .debug-body { margin-top: 0.5rem; position: relative; }
+
+  .debug-copy {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    z-index: 1;
+  }
+
+  .debug-pre {
+    background: #080c20;
+    border: 1px solid #1e2448;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
+    font-size: 0.72rem;
+    color: #8892c0;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 0;
+    max-height: 340px;
+    overflow-y: auto;
+    line-height: 1.5;
+  }
 </style>
