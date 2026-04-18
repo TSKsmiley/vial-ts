@@ -151,6 +151,10 @@ export const KC_RGUI = 0x00E7
 
 // ── QMK layer / special keycodes ────────────────────────────────────────────
 
+/** Mod-tap: MT(mod, kc) — range 0x2000–0x3FFF */
+export const QK_MOD_TAP          = 0x2000
+/** Layer-tap: LT(layer, kc) — range 0x4000–0x4FFF */
+export const QK_LAYER_TAP        = 0x4000
 /** Momentary layer activation: MO(n) */
 export const QK_MOMENTARY        = 0x5100
 /** Switch to layer: TO(n) */
