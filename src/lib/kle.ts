@@ -21,6 +21,7 @@
 import type { LayoutKey } from './types'
 
 export function parseKleLayout(kleRows: unknown[]): LayoutKey[] {
+  if (!Array.isArray(kleRows)) return []
   const keys: LayoutKey[] = []
 
   // Persistent rotation-cluster state

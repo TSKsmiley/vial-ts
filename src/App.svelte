@@ -43,12 +43,17 @@
   const TARGET_WIDTH = 880
 
   function getLayoutKeys(kb: VialKeyboard | null): LayoutKey[] {
-    if (!kb?.definition?.layouts?.keymap) return []
-    return parseKleLayout(kb.definition.layouts.keymap)
+    try {
+      const keymap = kb?.definition?.layouts?.keymap
+      if (!Array.isArray(keymap) || keymap.length === 0) return []
+      return parseKleLayout(keymap)
+    } catch {
+      return []
+    }
   }
 
-  function getLayoutBounds(keys: LayoutKey[]) {
-    if (!keys.length) return null
+  function getLayoutBounds(keys: LayoutKey[] | null | undefined) {
+    if (!keys || keys.length === 0) return null
     const xs = keys.flatMap(k => [k.x, k.x + k.w])
     const ys = keys.flatMap(k => [k.y, k.y + k.h])
     return {
