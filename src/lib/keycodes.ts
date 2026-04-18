@@ -223,6 +223,30 @@ const NAME_TO_CODE = new Map<string, number>(
   Array.from(KEYCODE_NAMES.entries()).map(([code, name]) => [name.toUpperCase(), code])
 )
 
+// ── Mod-tap helper ───────────────────────────────────────────────────────────
+
+/** QMK 5-bit modifier field used in mod-tap keycodes. */
+const MT_MOD_NAMES: ReadonlyMap<number, string> = new Map([
+  [0x01, 'LCTL'], [0x02, 'LSFT'], [0x04, 'LALT'], [0x08, 'LGUI'],
+  [0x11, 'RCTL'], [0x12, 'RSFT'], [0x14, 'RALT'], [0x18, 'RGUI'],
+])
+
+/** Format the 5-bit modifier field of an MT keycode (e.g. 0x03 → "LCTL+LSFT"). */
+function modName(mods: number): string {
+  const named = MT_MOD_NAMES.get(mods)
+  if (named) return named
+  // Build a compound name from individual bits
+  const right = (mods & 0x10) !== 0
+  const side  = right ? 'R' : 'L'
+  const base  = mods & 0x0F
+  const parts: string[] = []
+  if (base & 0x01) parts.push(`${side}CTL`)
+  if (base & 0x02) parts.push(`${side}SFT`)
+  if (base & 0x04) parts.push(`${side}ALT`)
+  if (base & 0x08) parts.push(`${side}GUI`)
+  return parts.length ? parts.join('+') : `MOD${mods}`
+}
+
 /**
  * Return the display name for a raw QMK keycode.
  * Falls back to "0x{hex}" for unknown codes.
@@ -230,11 +254,27 @@ const NAME_TO_CODE = new Map<string, number>(
 export function keycodeName(code: number): string {
   if (KEYCODE_NAMES.has(code)) return KEYCODE_NAMES.get(code)!
 
+  // Mod-tap: MT(mod, kc) — 0x2000–0x3FFF  (bits 14-13 = 01 with bit 13 of 0x2000 set)
+  if ((code & 0xE000) === QK_MOD_TAP) {
+    const mods = (code >> 8) & 0x1F
+    const kc   = code & 0xFF
+    const kcStr = KEYCODE_NAMES.get(kc) ?? `0x${kc.toString(16).padStart(2, '0').toUpperCase()}`
+    return `${modName(mods)}/${kcStr}`
+  }
+
+  // Layer-tap: LT(layer, kc) — 0x4000–0x4FFF
+  if ((code & 0xF000) === QK_LAYER_TAP) {
+    const layer = (code >> 8) & 0x0F
+    const kc    = code & 0xFF
+    const kcStr = KEYCODE_NAMES.get(kc) ?? `0x${kc.toString(16).padStart(2, '0').toUpperCase()}`
+    return `LT(${layer},${kcStr})`
+  }
+
   // Layer operations
-  if ((code & 0xFF00) === QK_MOMENTARY)    return `MO(${code & 0xFF})`
-  if ((code & 0xFF00) === QK_TO)           return `TO(${code & 0xFF})`
-  if ((code & 0xFF00) === QK_TOGGLE_LAYER) return `TG(${code & 0xFF})`
-  if ((code & 0xFF00) === QK_TAP_TOGGLE)   return `TT(${code & 0xFF})`
+  if ((code & 0xFF00) === QK_MOMENTARY)      return `MO(${code & 0xFF})`
+  if ((code & 0xFF00) === QK_TO)             return `TO(${code & 0xFF})`
+  if ((code & 0xFF00) === QK_TOGGLE_LAYER)   return `TG(${code & 0xFF})`
+  if ((code & 0xFF00) === QK_TAP_TOGGLE)     return `TT(${code & 0xFF})`
   if ((code & 0xFF00) === QK_ONE_SHOT_LAYER) return `OSL(${code & 0xFF})`
   if ((code & 0xFF00) === QK_ONE_SHOT_MOD)   return `OSM(${code & 0xFF})`
 
@@ -258,6 +298,28 @@ export function keycodeFromName(name: string): number | undefined {
       TT: QK_TAP_TOGGLE, OSL: QK_ONE_SHOT_LAYER,
     }
     return (map[layerMatch[1]] | n)
+  }
+
+  // Mod-tap: "LCTL/D", "LSFT/S", etc.
+  const modTapMatch = name.match(/^([^/]+)\/(.+)$/)
+  if (modTapMatch) {
+    const modStr = modTapMatch[1].toUpperCase()
+    const kcVal  = keycodeFromName(modTapMatch[2])
+    if (kcVal !== undefined && kcVal <= 0xFF) {
+      // Reverse-lookup mod name
+      for (const [mod, nm] of MT_MOD_NAMES) {
+        if (nm === modStr) return QK_MOD_TAP | (mod << 8) | kcVal
+      }
+    }
+  }
+
+  // Layer-tap: "LT(1,SPC)"
+  const ltMatch = upper.match(/^LT\((\d+),(.+)\)$/)
+  if (ltMatch) {
+    const layer = parseInt(ltMatch[1], 10)
+    const kcVal = keycodeFromName(ltMatch[2])
+    if (kcVal !== undefined && kcVal <= 0xFF && layer <= 0xF)
+      return QK_LAYER_TAP | (layer << 8) | kcVal
   }
 
   // Hex literal e.g. "0x003A"

@@ -23,6 +23,7 @@ import {
   MSG_LEN,
   BUFFER_FETCH_CHUNK,
   CMD_VIA_GET_PROTOCOL_VERSION,
+  CMD_VIA_GET_KEYBOARD_VALUE,
   CMD_VIA_GET_LAYER_COUNT,
   CMD_VIA_KEYMAP_GET_BUFFER,
   CMD_VIA_SET_KEYCODE,
@@ -30,6 +31,7 @@ import {
   CMD_VIAL_GET_KEYBOARD_ID,
   CMD_VIAL_GET_SIZE,
   CMD_VIAL_GET_DEFINITION,
+  VIA_LAYOUT_OPTIONS,
   VIAL_HID_FILTERS,
   SUPPORTED_VIA_PROTOCOL,
   SUPPORTED_VIAL_PROTOCOL,
@@ -116,6 +118,7 @@ export class VialKeyboard {
   rows = 0
   cols = 0
   layers = 0
+  layoutOptions = 0
   definition: KeyboardDefinition | null = null
 
   /** keymap[layer][row][col] = QMK keycode (uint16, big-endian on wire) */
@@ -181,6 +184,7 @@ export class VialKeyboard {
     await this._reloadLayout()
     this._checkProtocol()
     await this._reloadLayers()
+    await this._reloadLayoutOptions()
     await this._reloadKeymap()
   }
 
@@ -365,6 +369,19 @@ export class VialKeyboard {
     const d = await this._send(new Uint8Array([CMD_VIA_GET_LAYER_COUNT]))
     this.layers = d[1]
     this._dbg(`  Layers: ${this.layers}`)
+  }
+
+  /** CMD_VIA_GET_KEYBOARD_VALUE(VIA_LAYOUT_OPTIONS) → big-endian uint32 at [1:5] */
+  private async _reloadLayoutOptions(): Promise<void> {
+    this._dbg('Step 6a – GET_LAYOUT_OPTIONS (0x02 0x02)')
+    try {
+      const d = await this._send(new Uint8Array([CMD_VIA_GET_KEYBOARD_VALUE, VIA_LAYOUT_OPTIONS]))
+      this.layoutOptions = ((d[1] << 24) | (d[2] << 16) | (d[3] << 8) | d[4]) >>> 0
+      this._dbg(`  Layout options: 0x${this.layoutOptions.toString(16).padStart(8, '0').toUpperCase()}`)
+    } catch {
+      this._dbg('  ⚠ Could not read layout options (defaulting to 0)')
+      this.layoutOptions = 0
+    }
   }
 
   private _checkProtocol(): void {

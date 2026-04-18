@@ -42,11 +42,32 @@
   /** Target stage width – scale down if the layout is wider */
   const TARGET_WIDTH = 880
 
+  /**
+   * Decode a VIA layout-options bitmask into an array of selected option values,
+   * one entry per option group.  Group i uses ceil(log2(numChoices_i)) bits,
+   * packed from the LSB.  Follows the same logic as vial-gui's layout_widget.py.
+   */
+  function decodeLayoutOptions(bitmask: number, labelGroups?: string[][]): number[] {
+    if (!labelGroups || labelGroups.length === 0) return []
+    const result: number[] = []
+    let shift = 0
+    for (const group of labelGroups) {
+      const numChoices = Math.max(1, group.length - 1)  // first element is group label
+      const bitsNeeded = numChoices <= 1 ? 1 : Math.ceil(Math.log2(numChoices))
+      const mask = (1 << bitsNeeded) - 1
+      result.push((bitmask >> shift) & mask)
+      shift += bitsNeeded
+    }
+    return result
+  }
+
   function getLayoutKeys(kb: VialKeyboard | null): LayoutKey[] {
     try {
       const keymap = kb?.definition?.layouts?.keymap
       if (!Array.isArray(keymap) || keymap.length === 0) return []
-      return parseKleLayout(keymap)
+      const labelGroups = kb?.definition?.layouts?.labels
+      const selectedOptions = decodeLayoutOptions(kb?.layoutOptions ?? 0, labelGroups)
+      return parseKleLayout(keymap, selectedOptions)
     } catch {
       return []
     }

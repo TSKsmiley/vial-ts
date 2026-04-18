@@ -16,11 +16,23 @@
  *       ry     – set rotation-origin Y and reset cursor Y to ry (persists)
  *   - After placing a key, cursor X advances by w.
  *   - After each row, cursor Y advances by 1 and cursor X resets to rx.
+ *
+ * Layout options:
+ *   Vial keyboards can have alternative physical positions for certain keys
+ *   (e.g. splay vs. straight thumb cluster).  A key that belongs to a layout
+ *   option group has a third '\n'-separated label segment "groupIdx,optionValue".
+ *   The `selectedOptions` parameter specifies which option value is active for
+ *   each group (index = group index, value = selected option).  Keys whose
+ *   option value doesn't match are skipped.  Defaults to all-zeros (the
+ *   firmware's default layout option).
  */
 
 import type { LayoutKey } from './types'
 
-export function parseKleLayout(kleRows: unknown[]): LayoutKey[] {
+export function parseKleLayout(
+  kleRows: unknown[],
+  selectedOptions: readonly number[] = [],
+): LayoutKey[] {
   if (!Array.isArray(kleRows)) return []
   const keys: LayoutKey[] = []
 
@@ -50,14 +62,29 @@ export function parseKleLayout(kleRows: unknown[]): LayoutKey[] {
         x += dx; dx = 0
         y += dy; dy = 0
 
-        // Vial labels are "row,col" (first \n-delimited segment only)
-        const label = item.split('\n')[0] ?? ''
+        // Vial labels are "row,col[\nlayout_label[\ngroupIdx,optionValue]]"
+        const lines = item.split('\n')
+        const label = lines[0] ?? ''
         const match = /^(\d+),(\d+)$/.exec(label)
         if (match) {
-          keys.push({ row: +match[1], col: +match[2], x, y, w, h, r, rx, ry })
+          // Check layout option filter (3rd line, e.g. "0,1")
+          let include = true
+          const optLine = (lines[2] ?? '').trim()
+          if (optLine) {
+            const optMatch = /^(\d+),(\d+)$/.exec(optLine)
+            if (optMatch) {
+              const groupIdx   = +optMatch[1]
+              const optionVal  = +optMatch[2]
+              const selected   = selectedOptions[groupIdx] ?? 0
+              if (optionVal !== selected) include = false
+            }
+          }
+          if (include) {
+            keys.push({ row: +match[1], col: +match[2], x, y, w, h, r, rx, ry })
+          }
         }
 
-        x += w   // advance cursor by key width
+        x += w   // advance cursor by key width (even for skipped keys)
         w = 1; h = 1
       }
     }

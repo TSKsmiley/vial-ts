@@ -77,6 +77,7 @@ export interface KeyboardDefinition {
   matrix: MatrixConfig
   layouts: {
     keymap: unknown[]
+    /** Layout option group labels: labels[i][0] = group name, labels[i][1..] = choice names */
     labels?: string[][]
   }
   customKeycodes?: Array<{ name: string; title: string; shortName: string }>
