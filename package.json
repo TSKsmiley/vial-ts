@@ -20,6 +20,7 @@
     "vite": "^8.0.8"
   },
   "dependencies": {
-    "lzma": "^2.3.2"
+    "lzma": "^2.3.2",
+    "xz-decompress": "^0.2.3"
   }
 }
