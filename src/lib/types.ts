@@ -63,6 +63,12 @@ export interface LayoutKey {
   w: number
   /** Height in key units (default 1) */
   h: number
+  /** Rotation in degrees (default 0) */
+  r: number
+  /** Rotation origin X in key units (default 0) */
+  rx: number
+  /** Rotation origin Y in key units (default 0) */
+  ry: number
 }
 
 /** Full keyboard definition JSON (LZMA-compressed in firmware, unpacked here) */

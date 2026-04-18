@@ -2,7 +2,8 @@
   import { requestVialKeyboard, VialKeyboard, VialConnectionError, ProtocolError } from './lib/vial-hid'
   import { loadVil, saveVil, downloadVil, readVilFile } from './lib/vil'
   import { keycodeName, keycodeFromName } from './lib/keycodes'
-  import type { VilFile } from './lib/types'
+  import { parseKleLayout } from './lib/kle'
+  import type { VilFile, LayoutKey } from './lib/types'
 
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,45 @@
   const layers = $derived(vil ? (vil as VilFile).layout.length : 0)
   const rows   = $derived(vil ? ((vil as VilFile).layout[0]?.length ?? 0) : 0)
   const cols   = $derived(vil ? ((vil as VilFile).layout[0]?.[0]?.length ?? 0) : 0)
+
+  // ── Physical layout (KLE) ──────────────────────────────────────────────────
+
+  /** 1 key-unit of extra padding on every side to absorb rotated-key overflow */
+  const LAYOUT_PAD  = 1.0
+  /** Maximum pixels per key unit (standard 1u keycap = 19 mm, ~54 px on screen) */
+  const MAX_KEY_UNIT = 54
+  /** Target stage width – scale down if the layout is wider */
+  const TARGET_WIDTH = 880
+
+  function getLayoutKeys(kb: VialKeyboard | null): LayoutKey[] {
+    if (!kb?.definition?.layouts?.keymap) return []
+    return parseKleLayout(kb.definition.layouts.keymap)
+  }
+
+  function getLayoutBounds(keys: LayoutKey[]) {
+    if (!keys.length) return null
+    const xs = keys.flatMap(k => [k.x, k.x + k.w])
+    const ys = keys.flatMap(k => [k.y, k.y + k.h])
+    return {
+      minX: Math.min(...xs) - LAYOUT_PAD,
+      maxX: Math.max(...xs) + LAYOUT_PAD,
+      minY: Math.min(...ys) - LAYOUT_PAD,
+      maxY: Math.max(...ys) + LAYOUT_PAD,
+    }
+  }
+
+  /** Parse KLE keys from the connected keyboard's definition, or [] when unavailable. */
+  const layoutKeys: LayoutKey[] = $derived(getLayoutKeys(keyboard))
+
+  /** Pre-rotation bounding box of all keys (+ LAYOUT_PAD to absorb rotation). */
+  const layoutBounds = $derived(getLayoutBounds(layoutKeys))
+
+  /** Pixels per key unit, scaled to fit TARGET_WIDTH. */
+  const keyUnit = $derived(
+    layoutBounds
+      ? Math.min(MAX_KEY_UNIT, TARGET_WIDTH / (layoutBounds.maxX - layoutBounds.minX))
+      : MAX_KEY_UNIT,
+  )
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -266,25 +306,38 @@
     <section class="card keymap-wrap">
       <h2>
         Layer {activeLayer}
-        <span class="dim">({rows} × {cols})</span>
+        {#if !layoutBounds}<span class="dim">({rows} × {cols})</span>{/if}
       </h2>
 
-      <div class="keymap-grid" style="--cols: {cols}">
-        {#each { length: rows } as _, r}
-          {#each { length: cols } as _, c}
-            {@const code = vil.layout[activeLayer][r][c]}
+      {#if layoutBounds}
+        <!-- ── Physical KLE layout ── -->
+        {@const bounds = layoutBounds}
+        <div
+          class="layout-stage"
+          style:width="{(bounds.maxX - bounds.minX) * keyUnit}px"
+          style:height="{(bounds.maxY - bounds.minY) * keyUnit}px"
+        >
+          {#each layoutKeys as lk (lk.row * 256 + lk.col)}
+            {@const code = vil.layout[activeLayer]?.[lk.row]?.[lk.col] ?? 0}
             {@const isEditing =
               editing?.layer === activeLayer &&
-              editing?.row === r &&
-              editing?.col === c}
+              editing?.row === lk.row &&
+              editing?.col === lk.col}
+            {@const kx = (lk.x - bounds.minX) * keyUnit + 2}
+            {@const ky = (lk.y - bounds.minY) * keyUnit + 2}
+            {@const kw = lk.w * keyUnit - 4}
+            {@const kh = lk.h * keyUnit - 4}
+            {@const ox = (lk.rx - lk.x) * keyUnit}
+            {@const oy = (lk.ry - lk.y) * keyUnit}
             <div
               class="key"
               class:transparent={code === 0x0001}
               class:empty={code === 0x0000}
+              style="left:{kx}px;top:{ky}px;width:{kw}px;height:{kh}px;transform-origin:{ox}px {oy}px;transform:rotate({lk.r}deg)"
               role="button"
               tabindex="0"
-              onclick={() => startEdit(activeLayer, r, c)}
-              onkeydown={(e) => e.key === 'Enter' && startEdit(activeLayer, r, c)}
+              onclick={() => startEdit(activeLayer, lk.row, lk.col)}
+              onkeydown={(e) => e.key === 'Enter' && startEdit(activeLayer, lk.row, lk.col)}
             >
               {#if isEditing}
                 <!-- svelte-ignore a11y_autofocus -->
@@ -300,8 +353,44 @@
               {/if}
             </div>
           {/each}
-        {/each}
-      </div>
+        </div>
+
+      {:else}
+        <!-- ── Fallback: plain matrix grid (used when no KLE data is available) ── -->
+        <div class="keymap-grid" style="--cols: {cols}">
+          {#each { length: rows } as _, r}
+            {#each { length: cols } as _, c}
+              {@const code = vil.layout[activeLayer][r][c]}
+              {@const isEditing =
+                editing?.layer === activeLayer &&
+                editing?.row === r &&
+                editing?.col === c}
+              <div
+                class="key"
+                class:transparent={code === 0x0001}
+                class:empty={code === 0x0000}
+                role="button"
+                tabindex="0"
+                onclick={() => startEdit(activeLayer, r, c)}
+                onkeydown={(e) => e.key === 'Enter' && startEdit(activeLayer, r, c)}
+              >
+                {#if isEditing}
+                  <!-- svelte-ignore a11y_autofocus -->
+                  <input
+                    class="key-input"
+                    bind:value={editValue}
+                    autofocus
+                    onblur={commitEdit}
+                    onkeydown={handleKeyDown}
+                  />
+                {:else}
+                  <span class="key-label">{keycodeName(code)}</span>
+                {/if}
+              </div>
+            {/each}
+          {/each}
+        </div>
+      {/if}
     </section>
 
   {:else}
@@ -468,8 +557,23 @@
   }
 
   /* ── keymap grid ── */
-  .keymap-wrap { overflow-x: auto; }
+  .keymap-wrap { overflow: auto; }
 
+  /* Physical KLE layout stage */
+  .layout-stage { position: relative; }
+
+  /* Keys inside the physical stage are absolutely positioned */
+  .layout-stage .key {
+    position: absolute;
+    aspect-ratio: unset;
+    min-width: unset;
+    max-width: unset;
+    box-sizing: border-box;
+  }
+
+  /* Plain matrix grid (fallback when no KLE data) */
+
+  /* Plain matrix grid (fallback when no KLE data) */
   .keymap-grid {
     display: grid;
     grid-template-columns: repeat(var(--cols), minmax(46px, 1fr));
