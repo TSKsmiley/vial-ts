@@ -7,13 +7,15 @@
  *   - oninputreport read handler set once after open
  *   - 500 ms read timeout matching vial-web's read_timeout()
  *
- * LZMA/XZ decompression: lzma_worker.js is loaded as a raw string via
- * Vite's `?raw` import and executed with a controlled `this` context so we
- * can call LZMA_WORKER.decompress() directly without Web Worker overhead.
+ * XZ decompression: the keyboard firmware compresses its definition JSON with
+ * Python's lzma.compress() which produces XZ/LZMA2 format (magic FD 37 7A 58
+ * 5A 00).  The older `lzma` npm package only handles raw LZMA1 (.lzma files)
+ * and misinterprets the XZ magic bytes as LZMA1 property bytes (pb=5 is out
+ * of range → "corrupted input").  We therefore use `xz-decompress`, a
+ * WebAssembly port of liblzma that fully supports XZ + CRC64 in the browser.
  */
 
-// Vite ?raw – bundled as a plain string, no Web Worker involved.
-import lzmaWorkerSrc from 'lzma/src/lzma_worker.js?raw'
+import { XzReadableStream } from 'xz-decompress'
 
 import type { KeyboardDefinition, VilFile } from './types'
 import { createBlankVil } from './vil'
@@ -33,62 +35,19 @@ import {
   SUPPORTED_VIAL_PROTOCOL,
 } from './vial-protocol'
 
-// ── LZMA / XZ decompression ──────────────────────────────────────────────────
-//
-// lzma_worker.js ends with:  this.LZMA = this.LZMA_WORKER = LZMA
-// Executing it with `container` as `this` gives us the LZMA algorithm object
-// without creating any Workers.  Matches the Python lzma.decompress() call in
-// keyboard_comm.py which defaults to FORMAT_XZ (LZMA2) – the same format
-// produced by `lzma.compress(data)` in vial_generate_definition.py.
-
-interface LzmaApi {
-  decompress(
-    data: number[],
-    onFinish: (result: number[] | string, error?: Error) => void,
-    onProgress?: (progress: number) => void,
-  ): void
-}
-
-let _lzma: LzmaApi | null = null
+// ── XZ decompression ─────────────────────────────────────────────────────────
 
 /**
- * Bootstrap the LZMA algorithm from the bundled worker source.
- *
- * WHY new Function() here?
- * `lzma_worker.js` is a CommonJS/UMD script designed to run inside a Web
- * Worker.  It ends with `this.LZMA = this.LZMA_WORKER = LZMA`, assigning
- * the algorithm object onto its `this` context.  Vite bundles it as a raw
- * string (`?raw`) so we can execute it with a plain object as `this` to
- * capture LZMA_WORKER without spinning up an actual Worker thread.
- *
- * SECURITY: `lzmaWorkerSrc` is a compile-time constant imported from the
- * `lzma` npm package via Vite's `?raw` loader.  It is never derived from
- * user input, network data, or dynamic runtime values, so this use of
- * `new Function` carries no injection risk.
+ * Decompress XZ/LZMA2-encoded data using the `xz-decompress` WebAssembly
+ * library.  This is the format produced by Python's lzma.compress() (FORMAT_XZ
+ * with CRC64), which is what vial firmware uses for the keyboard definition.
  */
-function getLzma(): LzmaApi {
-  if (_lzma) return _lzma
-  const ctx: Record<string, unknown> = {}
-  // lzmaWorkerSrc is a bundled, static string – see comment above.
-  // eslint-disable-next-line no-new-func
-  ;(new Function(lzmaWorkerSrc)).call(ctx)
-  const api = ctx['LZMA_WORKER'] as LzmaApi | undefined
-  if (!api?.decompress) throw new Error('Failed to initialise LZMA decompressor')
-  _lzma = api
-  return api
-}
-
-function lzmaDecompress(data: Uint8Array): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    getLzma().decompress(Array.from(data), (result, error) => {
-      if (error) { reject(error); return }
-      resolve(
-        typeof result === 'string'
-          ? new TextEncoder().encode(result)
-          : new Uint8Array(result),
-      )
-    })
-  })
+async function xzDecompress(data: Uint8Array): Promise<Uint8Array> {
+  const compressed = new Blob([data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer])
+  const decompressedStream = new XzReadableStream(compressed.stream())
+  const response   = new Response(decompressedStream)
+  const buf        = await response.arrayBuffer()
+  return new Uint8Array(buf)
 }
 
 // ── Debugging helpers ─────────────────────────────────────────────────────────
@@ -374,11 +333,11 @@ export class VialKeyboard {
     this._dbg(`  Received ${fetched} compressed bytes`)
     this._dbg(`  Compressed header: [${toHex(compressed.slice(0, 8))}] → ${describeCompressedFormat(compressed)}`)
 
-    // Step 5 – Decompress LZMA/XZ → JSON → definition
-    this._dbg('Step 5 – LZMA decompress')
+    // Step 5 – Decompress XZ/LZMA2 → JSON → definition
+    this._dbg('Step 5 – XZ decompress')
     let jsonBytes: Uint8Array
     try {
-      jsonBytes = await lzmaDecompress(compressed)
+      jsonBytes = await xzDecompress(compressed)
     } catch (e) {
       const msg = (e as Error).message ?? String(e)
       this._dbg(`  ✗ LZMA decompression failed: ${msg}`)
